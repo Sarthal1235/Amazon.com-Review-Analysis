@@ -1,8 +1,8 @@
 streamlit
-beautifulsoup4
 requests
-textblob
-pandas
-numpy
-tldextract
+beautifulsoup4
 selenium
+webdriver-manager
+pandas
+nltk
+tldextract

@@ -3,36 +3,54 @@ import requests
 from bs4 import BeautifulSoup
 import re
 import nltk
+import tldextract
 from nltk.sentiment import SentimentIntensityAnalyzer
-import joblib
 import pandas as pd
 from selenium import webdriver
 from selenium.webdriver.chrome.service import Service
 from selenium.webdriver.common.by import By
 from selenium.webdriver.chrome.options import Options
-from webdriver_manager.chrome import ChromeDriverManager
 import time
 
 nltk.download('vader_lexicon')
 sia = SentimentIntensityAnalyzer()
 
-# Load a pre-trained fake review detection model (if you have one)
-# model = joblib.load("fake_review_detector.pkl")
+SITE_SCRAPING_CONFIG = {
+    "amazon": "//span[@data-hook='review-body']",
+    "flipkart": "._2-N8zT",
+    "ebay": ".review-item-content",
+    "walmart": ".review-text",
+    "aliexpress": ".feedback-item"
+}
+
+def get_website_name(url):
+    ext = tldextract.extract(url)
+    return ext.domain  # Extracts amazon, flipkart, etc.
+
+def get_driver():
+    options = Options()
+    options.add_argument("--headless")  # No UI mode for cloud
+    options.add_argument("--no-sandbox")
+    options.add_argument("--disable-dev-shm-usage")  # Prevents memory issues
+    options.add_argument("--disable-blink-features=AutomationControlled")
+
+    service = Service("/usr/bin/chromedriver")  # Use system-installed ChromeDriver
+    return webdriver.Chrome(service=service, options=options)
 
 def extract_reviews(url):
-    options = Options()
-    options.add_argument("--headless")  # Run in headless mode (no browser UI)
-    options.add_argument("--disable-blink-features=AutomationControlled")  # Avoid bot detection
+    site_name = get_website_name(url)
+    xpath_pattern = SITE_SCRAPING_CONFIG.get(site_name)
 
-    service = Service(ChromeDriverManager().install())
-    driver = webdriver.Chrome(service=service, options=options)
-    
+    if not xpath_pattern:
+        return ["Website not supported for scraping"]
+
+    driver = get_driver()
     driver.get(url)
-    time.sleep(5)  # Wait for the page to load fully
+    time.sleep(5)  # Wait for the page to load
 
     reviews = []
     try:
-        review_elements = driver.find_elements(By.XPATH, "//span[@data-hook='review-body']")
+        review_elements = driver.find_elements(By.XPATH, xpath_pattern)
         reviews = [review.text.strip() for review in review_elements if review.text.strip()]
     except Exception as e:
         print("Error extracting reviews:", e)
@@ -45,7 +63,6 @@ def analyze_sentiment(reviews):
     avg_sentiment = sum(sentiments) / len(sentiments) if sentiments else 0
     return "Positive" if avg_sentiment > 0.05 else "Negative" if avg_sentiment < -0.05 else "Neutral"
 
-# Fake review detection (Placeholder for actual ML model prediction)
 def detect_fake_reviews(reviews):
     if not reviews:
         return "Not enough data"
@@ -54,17 +71,17 @@ def detect_fake_reviews(reviews):
     percentage_fake = (fake_reviews / len(reviews)) * 100
     return "Fake Product" if percentage_fake > 50 else "Real Product"
 
-# Streamlit UI
-st.title("Amazon Product Review Analyzer")
-st.markdown("Enter an Amazon product URL to check if the product is genuine and analyze customer sentiment.")
+st.title("E-Commerce Product Review Analyzer")
+st.markdown("Enter any product URL from major e-commerce platforms to check authenticity and analyze sentiment.")
 
-url = st.text_input("Amazon Product URL", "")
+url = st.text_input("Product URL", "")
 if st.button("Analyze"):
-    if not re.match(r'https?://(www\.)?amazon\.(in|com)/', url):
-        st.error("Please enter a valid Amazon product URL")
+    site_name = get_website_name(url)
+    if site_name not in SITE_SCRAPING_CONFIG:
+        st.error(f"Website '{site_name}' is not supported yet.")
     else:
         reviews = extract_reviews(url)
-        if not reviews:
+        if not reviews or "Website not supported" in reviews:
             st.error("Could not fetch reviews. Please try another product.")
         else:
             sentiment = analyze_sentiment(reviews)
