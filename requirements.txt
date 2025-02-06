@@ -5,3 +5,4 @@ textblob
 pandas
 numpy
 tldextract
+selenium
